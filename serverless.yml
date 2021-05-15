@@ -1,11 +1,11 @@
-service: game-of-life-v8
+service: game-of-life-v10
 
 plugins:
   - serverless-s3-sync
 
 custom:
-  bucket: game-of-life-bucket-v8 # edit this processing bucket field to a unique name
-  uibucket: game-of-life-ui-v8 # edit this frontend hosting field to a unique name
+  bucket: game-of-life-bucket-v10 # edit this processing bucket field to a unique name
+  uibucket: game-of-life-ui-v10 # edit this frontend hosting field to a unique name
   s3Sync:
     - bucketName: ${self:custom.uibucket}
       localDir: static
@@ -155,6 +155,7 @@ functions:
   worker:
     handler: worker.worker_handler
     memorySize: 10240
+    timeout: 900
     events:
       - s3:
           bucket: ${self:custom.bucket}
