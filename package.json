@@ -1,0 +1,6 @@
+{
+  "license": "ISC",
+  "dependencies": {
+    "serverless-s3-sync": "^1.17.1"
+  }
+}

@@ -1,0 +1,166 @@
+service: game-of-life-v8
+
+plugins:
+  - serverless-s3-sync
+
+custom:
+  bucket: game-of-life-bucket-v8 # edit this processing bucket field to a unique name
+  uibucket: game-of-life-ui-v8 # edit this frontend hosting field to a unique name
+  s3Sync:
+    - bucketName: ${self:custom.uibucket}
+      localDir: static
+
+provider:
+  name: aws
+  profile: default # Set to same as AWS CLI profile
+  runtime: python3.8
+  memorySize: 2048
+  logRetentionInDays: 7
+  versionFunctions: false
+  endpointType: REGIONAL
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - s3:*
+            - logs:CreateLogStream
+            - logs:CreateLogGroup
+          Resource: '*'
+  environment:
+    s3_bucket: ${self:custom.bucket}
+
+resources:
+  Resources:
+    GolSite:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:custom.uibucket}
+        CorsConfiguration:
+          CorsRules:
+            - AllowedHeaders:
+                - '*'
+              AllowedMethods:
+                - GET
+              AllowedOrigins:
+                - '*'
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: false
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: false
+        WebsiteConfiguration:
+          IndexDocument: index.html
+    BucketPolicyGolSite:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        Bucket: ${self:custom.uibucket}
+        PolicyDocument:
+          Statement:
+            - Sid: AllowPublicRead
+              Effect: Allow
+              Principal: "*"
+              Action:
+                s3:GetObject
+              Resource:
+                Fn::Join: [
+                  "", [
+                    "arn:aws:s3:::",
+                    {
+                      "Ref": "GolSite"
+                    },
+                    "/*"
+                  ]
+                ]
+    GolImgDump:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:custom.bucket}
+        CorsConfiguration:
+          CorsRules:
+            - AllowedHeaders:
+                - '*'
+              AllowedMethods:
+                - POST
+                - GET
+              AllowedOrigins:
+                - '*'
+        LifecycleConfiguration:
+          Rules:
+            - Id: ClearBucket
+              ExpirationInDays: 1
+              Status: Enabled
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: false
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: false
+    BucketPolicyGol1:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        Bucket: ${self:custom.bucket}
+        PolicyDocument:
+          Statement:
+            - Sid: AllowPublicWrite
+              Effect: Allow
+              Principal: "*"
+              Action:
+              - s3:PutObject
+              Resource:
+                Fn::Join: [
+                  "", [
+                    "arn:aws:s3:::",
+                    {
+                      "Ref": "GolImgDump"
+                    },
+                    "/*"
+                  ]
+                ]
+            - Sid: AllowPublicRead
+              Effect: Allow
+              Principal: "*"
+              Action:
+              - s3:GetObject
+              Resource:
+                Fn::Join: [
+                  "", [
+                    "arn:aws:s3:::",
+                    {
+                      "Ref": "GolImgDump"
+                    },
+                    "/*"
+                  ]
+                ]
+    
+
+functions:
+  request_handler:
+    handler: request_handler.request_handler
+    events:
+      - http:
+          path: '/'
+          method: get
+          cors:
+            origin: '*'
+          request:
+            parameters:
+              querystrings:
+                ext: true  # extension
+                evo: true  # number evolutions evo
+                scale: true  # zoom ratio scale
+                dur: true  # duration in ms fps
+                thresh: true  # image threshold
+                noise: true # whether to add noise
+
+  worker:
+    handler: worker.worker_handler
+    memorySize: 10240
+    events:
+      - s3:
+          bucket: ${self:custom.bucket}
+          event: s3:ObjectCreated:*
+          existing: true
+    layers:
+      - arn:aws:lambda:us-east-1:668099181075:layer:AWSLambda-Python38-SciPy1x:29
+      - arn:aws:lambda:us-east-1:770693421928:layer:Klayers-python38-Pillow:9
+

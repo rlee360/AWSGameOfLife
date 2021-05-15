@@ -1,0 +1,86 @@
+<html>
+ <head>
+  <title>GOLify</title>
+  <style type="text/css">
+body {font-family: Verdana, sans;line-height:1.4}
+img:before{content:"Result"}
+img{clear:both}
+  </style>
+ </head>
+ <body>
+  <h1>GOLify</h1>
+  <p>Supported files are JPEG, PNG, BMP, TIF, and TXT, the latter of which must consist of 0 and 1 values space-separated in each row and line-separated between rows.</p>
+  <form  method="POST" id="form" target="https://game-of-life-bucket-v6.s3.amazonaws.com"> <!-- Edit the bucket link with the chosen processing bucket name here -->
+      <input type="hidden" name="key" value="VALUE" />
+      <input type="hidden" name="AWSAccessKeyId" value="VALUE" />
+      <input type="hidden" name="x-amz-security-token" value="VALUE" />
+      <input type="hidden" name="policy" value="VALUE" />
+      <input type="hidden" name="signature" value="VALUE" />
+      <label for="file">File to GOLify</label><br><input type="file" name="file"><br>
+      <label for="total">Number of evolutions</label><br><input type="number" name="total" max="65535" min="1" step="1" value="10"><p>
+      <label for="ratio">Zoom/scale ratio</label><br><input type="number" name="ratio" min="1" max="10" step="1" value="1"><p>
+      <label for="frame">Frames per second</label><br><input type="number" name="frame" min="1" max="60" step="1" value="10"><p>
+      <label for="noise">Include random noise?</label><br><input type="checkbox" name="noise"><p>
+      <label for="light">Brightness threshold (for images)</label><br><input type="number" name="light" min="1" max="255" step="1" value="127"><p>
+   <input type="submit" value="Submit">
+  </form>
+  <script type="text/javascript">
+  const url = 'https://2yfq8ae8ag.execute-api.us-east-1.amazonaws.com/dev/'; /* paste the link provided by serverless here */
+  const form = document.getElementById('form');
+  form.addEventListener("submit", (event) => {
+   var xhr = new XMLHttpRequest();
+   const filename = form.querySelector("[name='file']").value.split('.');
+   if(filename.length < 2){ alert("File needs an extension!"); event.preventDefault(); return;}
+   const ext = filename.pop();
+   const num = form.querySelector("[name='total']").value;
+   const rat = form.querySelector("[name='ratio']").value;
+   const dur = 1000/form.querySelector("[name='frame']").value;
+   const thr = form.querySelector("[name='light']").value;
+   var xor = form.querySelector("[name='noise']").checked;
+   if(xor === true) { xor = 1 } else { xor = 0 }
+   xhr.open("GET", url+'?ext='+ext+'&evo='+num+'&scale='+rat+'&dur='+dur+'&thresh='+thr+'&noise='+xor);
+   xhr.send();
+   xhr.onload = function() {
+    console.log("Headers", xhr.getAllResponseHeaders());
+    console.log("Body", xhr.response);
+    const body = JSON.parse(xhr.response);
+    form.querySelector("[name='key']").value = body.fields.key;
+    form.querySelector("[name='AWSAccessKeyId']").value = body.fields.AWSAccessKeyId;
+    form.querySelector("[name='x-amz-security-token']").value = body.fields['x-amz-security-token'];
+    form.querySelector("[name='policy']").value = body.fields.policy;
+    form.querySelector("[name='signature']").value = body.fields.signature;
+    new FormData(form);
+   }
+   event.preventDefault();
+  });
+  form.addEventListener("formdata", (event) => {
+   form.querySelector("[type='submit']").disabled = true;
+   alert("Request sent!");
+   let data = event.formData;
+   var xhr = new XMLHttpRequest();
+   const target = form.getAttribute("target");
+   console.log("Posting to " + target);
+   xhr.open("POST", target);
+   xhr.send(data);
+   async function result() {
+    const poll = target+'/'+form.querySelector("[name='key']").value.replace(/\..*$/,'.gif');
+    console.log("Polling "+poll);
+    let response = await(fetch(poll));
+    console.log(response.status);
+    if(response.status != 200) {
+     await new Promise((resolve, reject) => setTimeout(resolve, 1000));
+     await result();
+    } else {
+     let message = await response.blob();
+     let img = document.createElement('img');
+     img.crossOrigin = 'anonymous';
+     form.remove();
+     document.body.append(img);
+     img.src = URL.createObjectURL(message);
+    }
+   }
+   xhr.onload = result;
+  });
+  </script>
+ </body>
+</html>
